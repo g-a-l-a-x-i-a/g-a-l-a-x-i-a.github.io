@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>galaxia</title>
+  <link rel="icon" type="image/jpeg" href="https://avatars.githubusercontent.com/u/170128271?v=4">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="enter-gate" id="enterGate" role="button" tabindex="0" aria-label="Enter site and play music">
+    <span class="enter-gate-text mono">click anywhere to enter</span>
+  </div>
+
+  <div class="shell">
+    <div class="container">
+      <header class="site-header">
+        <a href="#home" class="brand" data-nav="home">
+          <span class="avatar-wrap">
+            <img src="https://avatars.githubusercontent.com/u/170128271?v=4" alt="Galaxia" class="avatar-img" id="avatarImg">
+            <span class="avatar-fallback" id="avatarFallback" aria-hidden="true">G</span>
+          </span>
+          <span class="brand-name">galaxia</span>
+        </a>
+
+        <nav class="nav" aria-label="Primary">
+          <button type="button" class="nav-link is-active" data-view="home" aria-current="page">Home</button>
+          <button type="button" class="nav-link" data-view="research">Research</button>
+          <button type="button" class="nav-link" data-view="contact">Contact</button>
+        </nav>
+      </header>
+
+      <main class="main" id="mainContent">
+        <section class="view is-active" id="view-home" aria-labelledby="home-heading">
+          <div class="hero">
+            <h1 id="home-heading" class="hero-title">Galaxia</h1>
+            <p class="bio">
+              hello im big and scary rara, a 14 year old girl also known as galaxia. you may know me from some of my projects such as <strong class="accent-text">Starware</strong> or <strong class="accent-text">SimpleFullBright</strong> on Modrinth. currently learning reverse engineering, and working on
+              <strong class="accent-text">Starware</strong>.
+            </p>
+            <div class="hero-actions">
+              <button type="button" class="btn btn-primary" id="copyDiscordBtn" data-copy="rawr_raraa">
+                <span class="mono">discord: rawr_raraa</span>
+                <span class="copy-status" id="copyStatus" aria-live="polite">copy</span>
+              </button>
+              <a class="btn btn-secondary" href="https://github.com/g-a-l-a-x-i-a" target="_blank" rel="noopener noreferrer">
+                GitHub
+              </a>
+            </div>
+          </div>
+
+          <section class="section" aria-labelledby="projects-heading">
+            <div class="section-head">
+              <h2 id="projects-heading" class="section-title">Projects</h2>
+              <span class="section-meta mono">3 projects</span>
+            </div>
+
+            <ul class="project-list">
+              <li class="project-row">
+                <div class="project-main">
+                  <div class="project-title-line">
+                    <h3 class="project-name">Starware</h3>
+                    <a class="project-link mono" href="https://rawrclient.space" target="_blank" rel="noopener noreferrer">rawrclient.space</a>
+                  </div>
+                  <p class="project-desc">best bipass</p>
+                </div>
+                <span class="project-tag project-tag-current mono">current</span>
+              </li>
+              <li class="project-row">
+                <div class="project-main">
+                  <div class="project-title-line">
+                    <h3 class="project-name">CatoVG</h3>
+                    <a class="project-link mono" href="https://github.com/g-a-l-a-x-i-a/catovg" target="_blank" rel="noopener noreferrer">github.com/g-a-l-a-x-i-a/catovg</a>
+                  </div>
+                  <p class="project-desc">lightweight 2D NanoVG wrapper</p>
+                </div>
+                <span class="project-tag mono">github</span>
+              </li>
+              <li class="project-row">
+                <div class="project-main">
+                  <h3 class="project-name">Asteroid Client</h3>
+                  <p class="project-desc">trillionaire's bypass $$ (uses nano particle atom biosphere velocity packet to bipass anticheats)</p>
+                </div>
+                <span class="project-tag mono">past</span>
+              </li>
+            </ul>
+          </section>
+
+          <section class="section" aria-labelledby="stack-heading">
+            <div class="section-head">
+              <h2 id="stack-heading" class="section-title">Tech Stack</h2>
+            </div>
+            <ul class="stack-list">
+              <li class="stack-item mono">C++</li>
+              <li class="stack-item mono">Java</li>
+              <li class="stack-item mono">Python</li>
+              <li class="stack-item mono">JavaScript</li>
+              <li class="stack-item mono">Kotlin</li>
+              <li class="stack-item mono">Git</li>
+            </ul>
+          </section>
+        </section>
+
+        <section class="view" id="view-research" aria-labelledby="research-heading" hidden>
+          <div class="hero">
+            <h1 id="research-heading" class="hero-title">Research</h1>
+          </div>
+
+          <section class="section" aria-labelledby="writeups-heading">
+            <div class="section-head">
+              <h2 id="writeups-heading" class="section-title">Writeups</h2>
+              <span class="section-meta mono" id="writeupCount">0 writeups</span>
+            </div>
+            <div class="writeup-list" id="writeupList"></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-contact" aria-labelledby="contact-heading" hidden>
+          <div class="hero">
+            <h1 id="contact-heading" class="hero-title">Contact</h1>
+            <p class="tagline mono">reach out or check the repos</p>
+          </div>
+
+          <ul class="contact-list">
+            <li class="contact-row">
+              <div>
+                <h2 class="contact-label">Discord</h2>
+                <p class="contact-value mono">rawr_raraa</p>
+              </div>
+              <button type="button" class="btn btn-secondary" id="copyDiscordContactBtn" data-copy="rawr_raraa">
+                Copy handle
+              </button>
+            </li>
+            <li class="contact-row">
+              <div>
+                <h2 class="contact-label">GitHub</h2>
+                <p class="contact-value mono">github.com/g-a-l-a-x-i-a</p>
+              </div>
+              <a class="btn btn-secondary" href="https://github.com/g-a-l-a-x-i-a" target="_blank" rel="noopener noreferrer">
+                Open profile
+              </a>
+            </li>
+          </ul>
+        </section>
+      </main>
+    </div>
+
+    <footer class="site-footer mono">
+      <div class="footer-left">
+        <a href="https://github.com/g-a-l-a-x-i-a" target="_blank" rel="noopener noreferrer" class="footer-link">GitHub</a>
+        <span class="footer-sep" aria-hidden="true">·</span>
+        <span>© galaxia</span>
+      </div>
+      <div class="footer-audio" id="audioBar">
+        <span class="audio-label" id="audioLabel">click anywhere to play music</span>
+        <button type="button" class="audio-btn" id="audioToggleBtn" aria-label="Play or pause music" hidden>pause</button>
+        <button type="button" class="audio-btn" id="audioNextBtn" aria-label="Next track" hidden>next</button>
+      </div>
+    </footer>
+  </div>
+
+  <div class="sc-hidden" aria-hidden="true">
+    <iframe
+      id="scWidget"
+      title="Background audio player"
+      width="300"
+      height="166"
+      scrolling="no"
+      frameborder="no"
+      allow="autoplay; encrypted-media"
+      src="about:blank"
+    ></iframe>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
