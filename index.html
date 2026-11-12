@@ -105,17 +105,31 @@
         </section>
 
         <section class="view" id="view-research" aria-labelledby="research-heading" hidden>
-          <div class="hero">
-            <h1 id="research-heading" class="hero-title">Research</h1>
+          <div id="researchFeed">
+            <div class="hero">
+              <h1 id="research-heading" class="hero-title">Research</h1>
+            </div>
+
+            <section class="section" aria-labelledby="writeups-heading">
+              <div class="section-head">
+                <h2 id="writeups-heading" class="section-title">Writeups</h2>
+                <span class="section-meta mono" id="writeupCount">0 posts</span>
+              </div>
+              <div class="writeup-list" id="writeupList"></div>
+            </section>
           </div>
 
-          <section class="section" aria-labelledby="writeups-heading">
-            <div class="section-head">
-              <h2 id="writeups-heading" class="section-title">Writeups</h2>
-              <span class="section-meta mono" id="writeupCount">0 writeups</span>
+          <article class="post-reader" id="researchReader" aria-labelledby="postTitle" hidden>
+            <div class="post-nav">
+              <button type="button" class="btn btn-secondary post-back-btn mono" id="postBackBtn">&lt;- back to writeups</button>
             </div>
-            <div class="writeup-list" id="writeupList"></div>
-          </section>
+            <header class="post-header">
+              <div class="post-meta mono" id="postMeta"></div>
+              <h1 id="postTitle" class="post-title"></h1>
+              <p class="post-summary" id="postSummary"></p>
+            </header>
+            <div class="post-content" id="postContent"></div>
+          </article>
         </section>
 
         <section class="view" id="view-contact" aria-labelledby="contact-heading" hidden>
@@ -175,6 +189,7 @@
     ></iframe>
   </div>
 
+  <script src="posts.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

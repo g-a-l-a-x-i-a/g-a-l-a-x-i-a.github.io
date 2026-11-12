@@ -6,9 +6,40 @@ const views = {
   contact: document.getElementById("view-contact")
 };
 
-function switchView(target) {
+function parseRouteHash() {
+  const raw = window.location.hash.replace(/^#/, "");
+  if (!raw) return { view: "", slug: "" };
+  if (raw.startsWith("research/")) {
+    const rawSlug = raw.slice("research/".length).replace(/^\/+|\/+$/g, "");
+    try {
+      return { view: "research", slug: decodeURIComponent(rawSlug) };
+    } catch (_) {
+      return { view: "research", slug: rawSlug };
+    }
+  }
+  if (views[raw]) return { view: raw, slug: "" };
+  return { view: "", slug: "" };
+}
+
+function updateUrlHash(nextHash, push) {
+  if (!nextHash || window.location.hash === nextHash) return;
+  try {
+    if (push) {
+      history.pushState(null, "", nextHash);
+    } else {
+      history.replaceState(null, "", nextHash);
+    }
+  } catch (_) {
+    window.location.hash = nextHash;
+  }
+}
+
+function switchView(target, slug = "", options = {}) {
   const next = views[target] ? target : "home";
+  const push = Boolean(options.push);
+
   Object.entries(views).forEach(([key, el]) => {
+    if (!el) return;
     const active = key === next;
     el.hidden = !active;
     el.classList.toggle("is-active", active);
@@ -24,25 +55,31 @@ function switchView(target) {
     }
   });
 
-  if (window.location.hash !== `#${next}`) {
-    history.replaceState(null, "", `#${next}`);
+  if (next === "research") {
+    const openedSlug = slug && typeof openPost === "function" ? openPost(slug) : "";
+    if (openedSlug) {
+      updateUrlHash(`#research/${encodeURIComponent(openedSlug)}`, push);
+      return;
+    }
+    if (typeof showResearchFeed === "function") {
+      showResearchFeed();
+    }
+    updateUrlHash("#research", push);
+    return;
   }
+
+  updateUrlHash(`#${next}`, push);
 }
 
 navButtons.forEach((btn) => {
-  btn.addEventListener("click", () => switchView(btn.dataset.view));
+  btn.addEventListener("click", () => switchView(btn.dataset.view, "", { push: true }));
 });
 
 if (brandLink) {
   brandLink.addEventListener("click", (e) => {
     e.preventDefault();
-    switchView("home");
+    switchView("home", "", { push: true });
   });
-}
-
-const initialHash = window.location.hash.replace("#", "");
-if (initialHash && views[initialHash]) {
-  switchView(initialHash);
 }
 
 const avatarImg = document.getElementById("avatarImg");
@@ -94,19 +131,312 @@ bindCopyButton(
   "Copy handle"
 );
 
-const researchPosts = [];
+const researchFeed = document.getElementById("researchFeed");
+const researchReader = document.getElementById("researchReader");
 const writeupList = document.getElementById("writeupList");
 const writeupCount = document.getElementById("writeupCount");
+const postBackBtn = document.getElementById("postBackBtn");
+const postMeta = document.getElementById("postMeta");
+const postTitle = document.getElementById("postTitle");
+const postSummary = document.getElementById("postSummary");
+const postContent = document.getElementById("postContent");
 
-function renderResearch() {
+function slugify(value) {
+  return (
+    String(value || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "post"
+  );
+}
+
+function estimateReadTime(text) {
+  const words = String(text || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+  if (!words) return "";
+  return `${Math.max(1, Math.ceil(words / 200))} min read`;
+}
+
+function getPosts() {
+  const raw = Array.isArray(window.BLOG_POSTS) ? window.BLOG_POSTS : [];
+  const seen = new Set();
+  return raw
+    .filter((item) => item && typeof item === "object")
+    .map((item, index) => {
+      const base = slugify(item.slug || item.title || `post-${index + 1}`);
+      let unique = base;
+      let suffix = 2;
+      while (seen.has(unique)) {
+        unique = `${base}-${suffix}`;
+        suffix += 1;
+      }
+      seen.add(unique);
+
+      const tags = Array.isArray(item.tags)
+        ? item.tags.filter(Boolean).map(String)
+        : item.category
+          ? [String(item.category)]
+          : [];
+      const bodyText = Array.isArray(item.body)
+        ? item.body.join("\n\n")
+        : String(item.body || "");
+
+      return {
+        slug: unique,
+        title: String(item.title || "untitled"),
+        date: item.date ? String(item.date) : "",
+        tags,
+        summary: item.summary ? String(item.summary) : "",
+        body: bodyText,
+        readTime: item.readTime ? String(item.readTime) : estimateReadTime(bodyText)
+      };
+    });
+}
+
+function safeHref(rawUrl) {
+  const trimmed = String(rawUrl || "").trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("#") || /^\/(?!\/)/.test(trimmed)) return trimmed;
+  try {
+    const parsed = new URL(trimmed);
+    if (
+      parsed.protocol === "http:" ||
+      parsed.protocol === "https:" ||
+      parsed.protocol === "mailto:"
+    ) {
+      return parsed.href;
+    }
+  } catch (_) {
+    return "";
+  }
+  return "";
+}
+
+function appendPostMeta(container, post) {
+  if (!container) return;
+  container.replaceChildren();
+  if (post.date) {
+    const dateEl = document.createElement("span");
+    dateEl.textContent = post.date;
+    container.appendChild(dateEl);
+  }
+  if (post.readTime) {
+    const timeEl = document.createElement("span");
+    timeEl.textContent = post.readTime;
+    container.appendChild(timeEl);
+  }
+  post.tags.forEach((tagText) => {
+    const tag = document.createElement("span");
+    tag.className = "project-tag mono";
+    tag.textContent = tagText;
+    container.appendChild(tag);
+  });
+}
+
+function renderInlineMarkdown(container, text) {
+  const pattern = /`([^`]+)`|\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*|\*([^*]+)\*/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      container.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+    }
+    if (match[1] !== undefined) {
+      const code = document.createElement("code");
+      code.className = "post-inline-code";
+      code.textContent = match[1];
+      container.appendChild(code);
+    } else if (match[2] !== undefined) {
+      const href = safeHref(match[3]);
+      if (href) {
+        const link = document.createElement("a");
+        link.className = "post-link";
+        link.href = href;
+        link.textContent = match[2];
+        if (href.startsWith("http://") || href.startsWith("https://")) {
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+        }
+        container.appendChild(link);
+      } else {
+        container.appendChild(document.createTextNode(match[2]));
+      }
+    } else if (match[4] !== undefined) {
+      const strong = document.createElement("strong");
+      strong.textContent = match[4];
+      container.appendChild(strong);
+    } else if (match[5] !== undefined) {
+      const em = document.createElement("em");
+      em.textContent = match[5];
+      container.appendChild(em);
+    }
+    lastIndex = pattern.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    container.appendChild(document.createTextNode(text.slice(lastIndex)));
+  }
+}
+
+function renderMarkdown(container, markdown) {
+  if (!container) return;
+  container.replaceChildren();
+
+  const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+  let paragraphLines = [];
+  let listEl = null;
+  let quoteLines = [];
+  let inCodeBlock = false;
+  let codeLines = [];
+
+  function flushParagraph() {
+    if (paragraphLines.length === 0) return;
+    const p = document.createElement("p");
+    renderInlineMarkdown(p, paragraphLines.join(" "));
+    container.appendChild(p);
+    paragraphLines = [];
+  }
+
+  function flushList() {
+    if (!listEl) return;
+    container.appendChild(listEl);
+    listEl = null;
+  }
+
+  function flushQuote() {
+    if (quoteLines.length === 0) return;
+    const blockquote = document.createElement("blockquote");
+    const p = document.createElement("p");
+    renderInlineMarkdown(p, quoteLines.join(" "));
+    blockquote.appendChild(p);
+    container.appendChild(blockquote);
+    quoteLines = [];
+  }
+
+  function flushCodeBlock() {
+    const pre = document.createElement("pre");
+    pre.className = "post-code";
+    const code = document.createElement("code");
+    code.textContent = codeLines.join("\n");
+    pre.appendChild(code);
+    container.appendChild(pre);
+    codeLines = [];
+    inCodeBlock = false;
+  }
+
+  lines.forEach((line) => {
+    if (inCodeBlock) {
+      if (/^\s*```\s*$/.test(line)) {
+        flushCodeBlock();
+      } else {
+        codeLines.push(line);
+      }
+      return;
+    }
+
+    if (/^\s*```/.test(line)) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      inCodeBlock = true;
+      codeLines = [];
+      return;
+    }
+
+    if (!line.trim()) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      return;
+    }
+
+    const headingMatch = line.match(/^(#{1,3})\s+(.+)$/);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      const heading = document.createElement(`h${headingMatch[1].length + 1}`);
+      renderInlineMarkdown(heading, headingMatch[2].trim());
+      container.appendChild(heading);
+      return;
+    }
+
+    const listMatch = line.match(/^\s*[-*]\s+(.+)$/);
+    if (listMatch) {
+      flushParagraph();
+      flushQuote();
+      if (!listEl) {
+        listEl = document.createElement("ul");
+      }
+      const li = document.createElement("li");
+      renderInlineMarkdown(li, listMatch[1].trim());
+      listEl.appendChild(li);
+      return;
+    }
+
+    const quoteMatch = line.match(/^>\s?(.*)$/);
+    if (quoteMatch) {
+      flushParagraph();
+      flushList();
+      quoteLines.push(quoteMatch[1].trim());
+      return;
+    }
+
+    flushList();
+    flushQuote();
+    paragraphLines.push(line.trim());
+  });
+
+  if (inCodeBlock) {
+    flushCodeBlock();
+  }
+  flushParagraph();
+  flushList();
+  flushQuote();
+}
+
+function showResearchFeed() {
+  if (researchFeed) researchFeed.hidden = false;
+  if (researchReader) researchReader.hidden = true;
+}
+
+function openPost(slug) {
+  const posts = getPosts();
+  const normalized = slugify(slug);
+  const post = posts.find((item) => item.slug === slug || item.slug === normalized);
+  if (!post || !researchReader) return "";
+
+  appendPostMeta(postMeta, post);
+  if (postTitle) {
+    postTitle.textContent = post.title;
+  }
+  if (postSummary) {
+    postSummary.textContent = post.summary;
+    postSummary.hidden = !post.summary;
+  }
+  renderMarkdown(postContent, post.body);
+
+  if (researchFeed) researchFeed.hidden = true;
+  researchReader.hidden = false;
+  window.scrollTo(0, 0);
+  return post.slug;
+}
+
+function renderPostFeed() {
   if (!writeupList) return;
+  const posts = getPosts();
+
   if (writeupCount) {
-    const noun = researchPosts.length === 1 ? "writeup" : "writeups";
-    writeupCount.textContent = `${researchPosts.length} ${noun}`;
+    const noun = posts.length === 1 ? "post" : "posts";
+    writeupCount.textContent = `${posts.length} ${noun}`;
   }
 
   writeupList.replaceChildren();
-  if (researchPosts.length === 0) {
+  if (posts.length === 0) {
     const empty = document.createElement("div");
     empty.className = "writeup-empty";
     const title = document.createElement("p");
@@ -117,63 +447,61 @@ function renderResearch() {
     return;
   }
 
-  researchPosts.forEach((post) => {
+  posts.forEach((post) => {
     const card = document.createElement("article");
     card.className = "writeup-card";
 
-    const toggle = document.createElement("button");
-    toggle.type = "button";
-    toggle.className = "writeup-toggle";
-    toggle.setAttribute("aria-expanded", "false");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "writeup-card-btn";
 
     const main = document.createElement("div");
     main.className = "writeup-head-main";
     const title = document.createElement("h3");
     title.className = "writeup-title";
     title.textContent = post.title;
-    const summary = document.createElement("p");
-    summary.className = "writeup-summary";
-    summary.textContent = post.summary || "";
-    main.append(title, summary);
+    main.appendChild(title);
+
+    if (post.summary) {
+      const summary = document.createElement("p");
+      summary.className = "writeup-summary";
+      summary.textContent = post.summary;
+      main.appendChild(summary);
+    }
 
     const meta = document.createElement("div");
     meta.className = "writeup-meta mono";
-    if (post.date) {
-      const dateEl = document.createElement("span");
-      dateEl.textContent = post.date;
-      meta.appendChild(dateEl);
-    }
-    if (post.category) {
-      const tag = document.createElement("span");
-      tag.className = "project-tag mono";
-      tag.textContent = post.category;
-      meta.appendChild(tag);
-    }
+    appendPostMeta(meta, post);
 
-    const body = document.createElement("div");
-    body.className = "writeup-body";
-    body.hidden = true;
-    const paragraphs = Array.isArray(post.body) ? post.body : [post.body || ""];
-    paragraphs.forEach((text) => {
-      if (!text) return;
-      const p = document.createElement("p");
-      p.textContent = text;
-      body.appendChild(p);
+    btn.addEventListener("click", () => {
+      switchView("research", post.slug, { push: true });
     });
 
-    toggle.addEventListener("click", () => {
-      const nextOpen = body.hidden;
-      body.hidden = !nextOpen;
-      toggle.setAttribute("aria-expanded", nextOpen ? "true" : "false");
-    });
-
-    toggle.append(main, meta);
-    card.append(toggle, body);
+    btn.append(main, meta);
+    card.appendChild(btn);
     writeupList.appendChild(card);
   });
 }
 
-renderResearch();
+if (postBackBtn) {
+  postBackBtn.addEventListener("click", () => {
+    switchView("research", "", { push: true });
+  });
+}
+
+renderPostFeed();
+
+const initialRoute = parseRouteHash();
+if (initialRoute.view) {
+  switchView(initialRoute.view, initialRoute.slug);
+} else {
+  showResearchFeed();
+}
+
+window.addEventListener("hashchange", () => {
+  const route = parseRouteHash();
+  switchView(route.view || "home", route.slug);
+});
 
 const tracks = [
   {
