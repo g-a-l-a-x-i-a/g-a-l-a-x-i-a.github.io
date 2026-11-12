@@ -35,11 +35,13 @@ h1,
 h2,
 h3,
 p,
-ul {
+ul,
+ol {
   margin: 0;
 }
 
-ul {
+ul,
+ol {
   list-style: none;
   padding: 0;
 }
@@ -541,15 +543,24 @@ button:focus-visible {
 
 .post-content p + p,
 .post-content ul + p,
+.post-content ol + p,
 .post-content blockquote + p,
 .post-content pre + p {
   margin-top: 1rem;
 }
 
-.post-content ul {
+.post-content ul,
+.post-content ol {
   margin: 0.875rem 0;
   padding-left: 1.25rem;
+}
+
+.post-content ul {
   list-style: disc;
+}
+
+.post-content ol {
+  list-style: decimal;
 }
 
 .post-content li + li {

@@ -268,7 +268,7 @@ function appendPostMeta(container, post) {
 }
 
 function renderInlineMarkdown(container, text) {
-  const pattern = /`([^`]+)`|\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*|\*([^*]+)\*/g;
+  const pattern = /`([^`]+)`|\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*|\*([^*]+)\*|~~((?:[^~]|~(?!~))+)~~/g;
   let lastIndex = 0;
   let match;
 
@@ -304,6 +304,10 @@ function renderInlineMarkdown(container, text) {
       const em = document.createElement("em");
       em.textContent = match[5];
       container.appendChild(em);
+    } else if (match[6] !== undefined) {
+      const del = document.createElement("del");
+      renderInlineMarkdown(del, match[6]);
+      container.appendChild(del);
     }
     lastIndex = pattern.lastIndex;
   }
@@ -404,15 +408,30 @@ function renderMarkdown(container, markdown) {
       return;
     }
 
-    const listMatch = line.match(/^\s*[-*]\s+(.+)$/);
-    if (listMatch) {
+    const ulMatch = line.match(/^\s*[-*]\s+(.+)$/);
+    if (ulMatch) {
       flushParagraph();
       flushQuote();
-      if (!listEl) {
+      if (!listEl || listEl.tagName !== "UL") {
+        flushList();
         listEl = document.createElement("ul");
       }
       const li = document.createElement("li");
-      renderInlineMarkdown(li, listMatch[1].trim());
+      renderInlineMarkdown(li, ulMatch[1].trim());
+      listEl.appendChild(li);
+      return;
+    }
+
+    const olMatch = line.match(/^\s*\d+\.\s+(.+)$/);
+    if (olMatch) {
+      flushParagraph();
+      flushQuote();
+      if (!listEl || listEl.tagName !== "OL") {
+        flushList();
+        listEl = document.createElement("ol");
+      }
+      const li = document.createElement("li");
+      renderInlineMarkdown(li, olMatch[1].trim());
       listEl.appendChild(li);
       return;
     }
