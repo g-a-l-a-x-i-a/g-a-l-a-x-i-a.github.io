@@ -6,6 +6,6 @@ window.BLOG_POSTS = [
     tags: ["minecraft", "fabric", "jvm"],
     summary: "Reverse engineering a protected Fabric Mod",
     bodyFile: "posts/azuradlc-drm.md",
-    published: false
+    published: true
   }
 ];
