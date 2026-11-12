@@ -565,6 +565,13 @@ button:focus-visible {
   color: var(--text);
 }
 
+.post-content hr {
+  width: 100%;
+  margin: 1.75rem 0;
+  border: 0;
+  border-top: 2px solid var(--border);
+}
+
 .post-code {
   margin: 1rem 0;
   padding: 1rem;
