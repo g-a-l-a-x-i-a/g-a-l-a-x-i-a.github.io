@@ -68,6 +68,7 @@ function switchView(target, slug = "", options = {}) {
     return;
   }
 
+  activePostRequest += 1;
   updateUrlHash(`#${next}`, push);
 }
 
@@ -140,6 +141,8 @@ const postMeta = document.getElementById("postMeta");
 const postTitle = document.getElementById("postTitle");
 const postSummary = document.getElementById("postSummary");
 const postContent = document.getElementById("postContent");
+const loadedBodies = new Map();
+let activePostRequest = 0;
 
 function slugify(value) {
   return (
@@ -160,11 +163,30 @@ function estimateReadTime(text) {
   return `${Math.max(1, Math.ceil(words / 200))} min read`;
 }
 
+function canPreviewDrafts() {
+  const host = window.location.hostname;
+  if (host !== "localhost" && host !== "127.0.0.1") return false;
+  return new URLSearchParams(window.location.search).get("drafts") === "1";
+}
+
+function safeBodyPath(rawPath) {
+  const trimmed = String(rawPath || "").trim();
+  if (!trimmed || trimmed.startsWith("//") || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) {
+    return "";
+  }
+  return trimmed;
+}
+
 function getPosts() {
   const raw = Array.isArray(window.BLOG_POSTS) ? window.BLOG_POSTS : [];
+  const includeDrafts = canPreviewDrafts();
   const seen = new Set();
   return raw
-    .filter((item) => item && typeof item === "object")
+    .filter((item) => {
+      if (!item || typeof item !== "object") return false;
+      const isDraft = item.published === false || item.draft === true;
+      return includeDrafts || !isDraft;
+    })
     .map((item, index) => {
       const base = slugify(item.slug || item.title || `post-${index + 1}`);
       let unique = base;
@@ -183,6 +205,7 @@ function getPosts() {
       const bodyText = Array.isArray(item.body)
         ? item.body.join("\n\n")
         : String(item.body || "");
+      const bodyFile = safeBodyPath(item.bodyFile);
 
       return {
         slug: unique,
@@ -191,6 +214,8 @@ function getPosts() {
         tags,
         summary: item.summary ? String(item.summary) : "",
         body: bodyText,
+        bodyFile,
+        isDraft: item.published === false || item.draft === true,
         readTime: item.readTime ? String(item.readTime) : estimateReadTime(bodyText)
       };
     });
@@ -227,6 +252,12 @@ function appendPostMeta(container, post) {
     const timeEl = document.createElement("span");
     timeEl.textContent = post.readTime;
     container.appendChild(timeEl);
+  }
+  if (post.isDraft) {
+    const draftTag = document.createElement("span");
+    draftTag.className = "project-tag mono";
+    draftTag.textContent = "draft";
+    container.appendChild(draftTag);
   }
   post.tags.forEach((tagText) => {
     const tag = document.createElement("span");
@@ -399,9 +430,28 @@ function renderMarkdown(container, markdown) {
   flushQuote();
 }
 
+function renderPostStatus(message) {
+  if (!postContent) return;
+  const status = document.createElement("p");
+  status.className = "writeup-summary";
+  status.textContent = message;
+  postContent.replaceChildren(status);
+}
+
 function showResearchFeed() {
+  activePostRequest += 1;
   if (researchFeed) researchFeed.hidden = false;
   if (researchReader) researchReader.hidden = true;
+}
+
+function renderLoadedBody(post, text) {
+  const readTime = post.readTime || estimateReadTime(text);
+  appendPostMeta(postMeta, { ...post, readTime });
+  if (!String(text || "").trim()) {
+    renderPostStatus("draft file is empty.");
+    return;
+  }
+  renderMarkdown(postContent, text);
 }
 
 function openPost(slug) {
@@ -409,6 +459,8 @@ function openPost(slug) {
   const normalized = slugify(slug);
   const post = posts.find((item) => item.slug === slug || item.slug === normalized);
   if (!post || !researchReader) return "";
+
+  const requestId = ++activePostRequest;
 
   appendPostMeta(postMeta, post);
   if (postTitle) {
@@ -418,11 +470,44 @@ function openPost(slug) {
     postSummary.textContent = post.summary;
     postSummary.hidden = !post.summary;
   }
-  renderMarkdown(postContent, post.body);
 
   if (researchFeed) researchFeed.hidden = true;
   researchReader.hidden = false;
   window.scrollTo(0, 0);
+
+  if (post.body) {
+    renderMarkdown(postContent, post.body);
+    return post.slug;
+  }
+
+  if (!post.bodyFile) {
+    renderPostStatus("draft has no content yet.");
+    return post.slug;
+  }
+
+  if (loadedBodies.has(post.bodyFile)) {
+    renderLoadedBody(post, loadedBodies.get(post.bodyFile));
+    return post.slug;
+  }
+
+  renderPostStatus("loading writeup...");
+  fetch(post.bodyFile)
+    .then((res) => {
+      if (!res.ok) {
+        throw new Error(`http ${res.status}`);
+      }
+      return res.text();
+    })
+    .then((text) => {
+      loadedBodies.set(post.bodyFile, text);
+      if (requestId !== activePostRequest) return;
+      renderLoadedBody(post, text);
+    })
+    .catch(() => {
+      if (requestId !== activePostRequest) return;
+      renderPostStatus("could not load writeup file (preview via localhost or github pages).");
+    });
+
   return post.slug;
 }
 
