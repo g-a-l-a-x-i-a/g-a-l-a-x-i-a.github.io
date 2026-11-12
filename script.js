@@ -448,7 +448,7 @@ function renderLoadedBody(post, text) {
   const readTime = post.readTime || estimateReadTime(text);
   appendPostMeta(postMeta, { ...post, readTime });
   if (!String(text || "").trim()) {
-    renderPostStatus("draft file is empty.");
+    renderPostStatus(post.isDraft ? "draft file is empty." : "writeup coming soon.");
     return;
   }
   renderMarkdown(postContent, text);
