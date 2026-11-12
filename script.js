@@ -385,6 +385,14 @@ function renderMarkdown(container, markdown) {
       return;
     }
 
+    if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      container.appendChild(document.createElement("hr"));
+      return;
+    }
+
     const headingMatch = line.match(/^(#{1,3})\s+(.+)$/);
     if (headingMatch) {
       flushParagraph();
