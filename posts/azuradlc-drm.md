@@ -252,7 +252,7 @@ funny thing about the `AZMK` check on `keyshare.jar`: nothing checks `AZMK` afte
 
 ## 10. azuradlc-standalone.jar startup path
 
-now onto `azuradlc-standalone.jar` (`13702351` bytes, sha256 `fc813241150ba92932722ec21fcf3f03fcad205b6fe7d9e4c89ea91fcff884ac`, `739` zip entries). its `fabric.mod.json` sets `preLaunch` to `azura.StandalonePreLaunch` and `client` to `mqgwxpyvrncgsntl.fewjqzwtisqdiyrj.IlIllIIIlIIllIIIllIIIlII`, and neither `C2Client` nor `HeartbeatMonitor` is even in this build.
+now onto `azuradlc-standalone.jar` (`13702351` bytes, sha256 `fc813241150ba92932722ec21fcf3f03fcad205b6fe7d9e4c89ea91fcff884ac`, `739` zip entries), which i built by merging the decrypted core jar, the keyshare, and all the remote modules (`chinahat`, `storageesp`, `tnttimer`, `trapesp`, `wardenhelper`, and `waypoints`) into a single standalone jar. its `fabric.mod.json` sets `preLaunch` to `azura.StandalonePreLaunch` and `client` to `mqgwxpyvrncgsntl.fewjqzwtisqdiyrj.IlIllIIIlIIllIIIllIIIlII`, and neither `C2Client` nor `HeartbeatMonitor` is even in this build.
 
 `azura.StandalonePreLaunch#onPreLaunch()` skips `bundle()` and `arm()` completely; it just builds a hardcoded `int[8]` array (`[-384193463, -202911988, -254959261, -154077583, -60345756, -1275405303, -1270064063, 60170921]`) and calls `IIIllIIIllIlIlIlIlllllII.bqeydmlheupvufcu([I)V`.
 
