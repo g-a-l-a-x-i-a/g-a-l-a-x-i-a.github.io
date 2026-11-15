@@ -1,5 +1,14 @@
 window.BLOG_POSTS = [
   {
+    slug: "temple",
+    title: "Temple.nz: Did King Terry the terrible make a Minecraft client?",
+    date: "2026-11-15",
+    tags: ["minecraft", "fabric", "jvm"],
+    summary: "Dumping a VMP loader, catching lazy modules with JVMTI, and making it a standalone Fabric mod",
+    bodyFile: "posts/temple.md",
+    published: true
+  },
+  {
     slug: "clarity",
     title: "Clarity: why a broken zip and a java agent arent DRM",
     date: "2026-11-14",
