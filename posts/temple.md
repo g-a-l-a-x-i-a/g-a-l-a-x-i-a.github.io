@@ -18,7 +18,7 @@ as always: grab some monster before reading this :)
 
 we started with `temple-loader.exe`, a `22,701,568` byte windows x64 executable.
 
-the section table has `.vmp0`, `.vmp1`, and `.vmp2` with the entrypoint sitting inside the protected region, so its a standard VMP setup.
+the section table has `.vmp0`, `.vmp1`, and `.vmp2` with the entrypoint sitting inside the protected region, so its a standard VMProtect setup.
 
 there is still plenty of useful stuff sitting outside the protected path:
 
