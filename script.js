@@ -317,6 +317,112 @@ function renderInlineMarkdown(container, text) {
   }
 }
 
+function parseTableRow(line) {
+  const trimmed = String(line || "").trim();
+  if (!trimmed.includes("|")) return null;
+
+  const cells = [];
+  let current = "";
+  for (let i = 0; i < trimmed.length; i += 1) {
+    const ch = trimmed[i];
+    if (ch === "\\" && trimmed[i + 1] === "|") {
+      current += "|";
+      i += 1;
+      continue;
+    }
+    if (ch === "|") {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  cells.push(current.trim());
+
+  if (trimmed.startsWith("|")) cells.shift();
+  if (trimmed.endsWith("|")) cells.pop();
+
+  return cells.length ? cells : null;
+}
+
+function parseTableAlignments(cells) {
+  if (!Array.isArray(cells) || cells.length === 0) return null;
+  const alignments = [];
+  for (const cell of cells) {
+    if (!/^:?-+:?$/.test(cell)) return null;
+    if (cell.startsWith(":") && cell.endsWith(":")) {
+      alignments.push("center");
+    } else if (cell.endsWith(":")) {
+      alignments.push("right");
+    } else if (cell.startsWith(":")) {
+      alignments.push("left");
+    } else {
+      alignments.push("");
+    }
+  }
+  return alignments;
+}
+
+function expandFlattenedTableLine(line) {
+  const trimmed = String(line || "").trim();
+  if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) return null;
+
+  const parts = trimmed.split(/\|\s*\|/);
+  if (parts.length < 2) return null;
+
+  const rows = parts.map((part, idx) => {
+    let row = part;
+    if (idx > 0) row = `|${row}`;
+    if (idx < parts.length - 1) row = `${row}|`;
+    return row;
+  });
+
+  const headerCells = parseTableRow(rows[0]);
+  const sepCells = parseTableRow(rows[1]);
+  const alignments = parseTableAlignments(sepCells);
+  if (!headerCells || !alignments || headerCells.length !== alignments.length) {
+    return null;
+  }
+
+  return rows;
+}
+
+function renderTableBlock(container, headerCells, alignments, bodyRows) {
+  const wrap = document.createElement("div");
+  wrap.className = "post-table-wrap";
+
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+
+  headerCells.forEach((cellText, colIdx) => {
+    const th = document.createElement("th");
+    if (alignments[colIdx]) th.style.textAlign = alignments[colIdx];
+    renderInlineMarkdown(th, cellText);
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  if (bodyRows.length > 0) {
+    const tbody = document.createElement("tbody");
+    bodyRows.forEach((rowCells) => {
+      const tr = document.createElement("tr");
+      for (let colIdx = 0; colIdx < headerCells.length; colIdx += 1) {
+        const td = document.createElement("td");
+        if (alignments[colIdx]) td.style.textAlign = alignments[colIdx];
+        renderInlineMarkdown(td, rowCells[colIdx] || "");
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+  }
+
+  wrap.appendChild(table);
+  container.appendChild(wrap);
+}
+
 function renderMarkdown(container, markdown) {
   if (!container) return;
   container.replaceChildren();
@@ -363,14 +469,16 @@ function renderMarkdown(container, markdown) {
     inCodeBlock = false;
   }
 
-  lines.forEach((line) => {
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+
     if (inCodeBlock) {
       if (/^\s*```\s*$/.test(line)) {
         flushCodeBlock();
       } else {
         codeLines.push(line);
       }
-      return;
+      continue;
     }
 
     if (/^\s*```/.test(line)) {
@@ -379,14 +487,14 @@ function renderMarkdown(container, markdown) {
       flushQuote();
       inCodeBlock = true;
       codeLines = [];
-      return;
+      continue;
     }
 
     if (!line.trim()) {
       flushParagraph();
       flushList();
       flushQuote();
-      return;
+      continue;
     }
 
     if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
@@ -394,7 +502,45 @@ function renderMarkdown(container, markdown) {
       flushList();
       flushQuote();
       container.appendChild(document.createElement("hr"));
-      return;
+      continue;
+    }
+
+    const flattenedRows = expandFlattenedTableLine(line);
+    if (flattenedRows) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      const headerCells = parseTableRow(flattenedRows[0]);
+      const alignments = parseTableAlignments(parseTableRow(flattenedRows[1]));
+      const bodyRows = flattenedRows
+        .slice(2)
+        .map((rowLine) => parseTableRow(rowLine))
+        .filter(Boolean);
+      renderTableBlock(container, headerCells, alignments, bodyRows);
+      continue;
+    }
+
+    if (i + 1 < lines.length) {
+      const headerCells = parseTableRow(line);
+      const sepCells = parseTableRow(lines[i + 1]);
+      const alignments = parseTableAlignments(sepCells);
+      if (headerCells && alignments && headerCells.length === alignments.length) {
+        flushParagraph();
+        flushList();
+        flushQuote();
+        const bodyRows = [];
+        i += 1;
+        while (i + 1 < lines.length) {
+          const nextLine = lines[i + 1];
+          if (!nextLine.trim() || /^\s*```/.test(nextLine)) break;
+          const rowCells = parseTableRow(nextLine);
+          if (!rowCells) break;
+          bodyRows.push(rowCells);
+          i += 1;
+        }
+        renderTableBlock(container, headerCells, alignments, bodyRows);
+        continue;
+      }
     }
 
     const headingMatch = line.match(/^(#{1,3})\s+(.+)$/);
@@ -405,7 +551,7 @@ function renderMarkdown(container, markdown) {
       const heading = document.createElement(`h${headingMatch[1].length + 1}`);
       renderInlineMarkdown(heading, headingMatch[2].trim());
       container.appendChild(heading);
-      return;
+      continue;
     }
 
     const ulMatch = line.match(/^\s*[-*]\s+(.+)$/);
@@ -419,7 +565,7 @@ function renderMarkdown(container, markdown) {
       const li = document.createElement("li");
       renderInlineMarkdown(li, ulMatch[1].trim());
       listEl.appendChild(li);
-      return;
+      continue;
     }
 
     const olMatch = line.match(/^\s*\d+\.\s+(.+)$/);
@@ -433,7 +579,7 @@ function renderMarkdown(container, markdown) {
       const li = document.createElement("li");
       renderInlineMarkdown(li, olMatch[1].trim());
       listEl.appendChild(li);
-      return;
+      continue;
     }
 
     const quoteMatch = line.match(/^>\s?(.*)$/);
@@ -441,13 +587,13 @@ function renderMarkdown(container, markdown) {
       flushParagraph();
       flushList();
       quoteLines.push(quoteMatch[1].trim());
-      return;
+      continue;
     }
 
     flushList();
     flushQuote();
     paragraphLines.push(line.trim());
-  });
+  }
 
   if (inCodeBlock) {
     flushCodeBlock();

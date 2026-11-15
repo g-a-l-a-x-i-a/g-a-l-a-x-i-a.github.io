@@ -545,7 +545,8 @@ button:focus-visible {
 .post-content ul + p,
 .post-content ol + p,
 .post-content blockquote + p,
-.post-content pre + p {
+.post-content pre + p,
+.post-content .post-table-wrap + p {
   margin-top: 1rem;
 }
 
@@ -593,6 +594,43 @@ button:focus-visible {
   font-size: 0.8125rem;
   line-height: 1.6;
   color: var(--text);
+}
+
+.post-table-wrap {
+  margin: 1rem 0;
+  border-radius: 0.625rem;
+  border: 1px solid var(--divider);
+  background-color: var(--surface);
+  overflow-x: auto;
+}
+
+.post-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.post-table-wrap th,
+.post-table-wrap td {
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--divider);
+}
+
+.post-table-wrap th {
+  font-weight: 700;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.post-table-wrap td {
+  color: var(--text-muted);
+}
+
+.post-table-wrap tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 .post-inline-code {
