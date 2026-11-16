@@ -1,5 +1,14 @@
 window.BLOG_POSTS = [
   {
+    slug: "corz",
+    title: "Corz: all that Rust and qProtect just to reuse one XOR keystream",
+    date: "2026-11-16",
+    tags: ["minecraft", "fabric", "jvm", "native", "vmp"],
+    summary: "Turning a VMP launcher and reused XOR keystream into a standalone 1.21.11 Fabric mod",
+    bodyFile: "posts/corz.md",
+    published: true
+  },
+  {
     slug: "kuzi",
     title: "Kuzi: all that native crypto just to lose to Class.forName",
     date: "2026-11-16",

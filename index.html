@@ -127,10 +127,6 @@
                 <h2 id="writeups-heading" class="section-title">Writeups</h2>
                 <span class="section-meta mono" id="writeupCount">0 posts</span>
               </div>
-              <div class="takedown-banner" role="note">
-                <span class="takedown-badge mono">notice</span>
-                <p class="takedown-text">if you want something taken down, contact me on discord at <span class="takedown-handle mono">rawr_raraa</span> and prove you own the project.</p>
-              </div>
               <div class="writeup-list" id="writeupList"></div>
             </section>
           </div>
@@ -144,7 +140,10 @@
               <h1 id="postTitle" class="post-title"></h1>
               <p class="post-summary" id="postSummary"></p>
             </header>
-            <div class="post-content" id="postContent"></div>
+            <div class="post-layout">
+              <div class="post-content" id="postContent"></div>
+              <aside class="post-toc" id="postToc" aria-label="Contents" hidden></aside>
+            </div>
           </article>
         </section>
 
@@ -184,7 +183,7 @@
         <span class="footer-sep" aria-hidden="true">·</span>
         <span>© galaxia</span>
       </div>
-      <div class="footer-audio" id="audioBar">
+      <div class="footer-audio">
         <span class="audio-label" id="audioLabel">click anywhere to play music</span>
         <button type="button" class="audio-btn" id="audioToggleBtn" aria-label="Play or pause music" hidden>pause</button>
         <button type="button" class="audio-btn" id="audioNextBtn" aria-label="Next track" hidden>next</button>

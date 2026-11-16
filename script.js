@@ -5,6 +5,26 @@ const views = {
   research: document.getElementById("view-research"),
   contact: document.getElementById("view-contact")
 };
+const researchFeed = document.getElementById("researchFeed");
+const researchReader = document.getElementById("researchReader");
+const writeupList = document.getElementById("writeupList");
+const writeupCount = document.getElementById("writeupCount");
+const postBackBtn = document.getElementById("postBackBtn");
+const postMeta = document.getElementById("postMeta");
+const postTitle = document.getElementById("postTitle");
+const postSummary = document.getElementById("postSummary");
+const postContent = document.getElementById("postContent");
+const postToc = document.getElementById("postToc");
+const enterGate = document.getElementById("enterGate");
+const scIframe = document.getElementById("scWidget");
+const audioLabel = document.getElementById("audioLabel");
+const audioToggleBtn = document.getElementById("audioToggleBtn");
+const audioNextBtn = document.getElementById("audioNextBtn");
+
+const loadedBodies = new Map();
+let activePostRequest = 0;
+let tocScrollHandler = null;
+let graphIdCounter = 0;
 
 const SLUG_REDIRECTS = {
   "azuradlc-drm": "azuradlc"
@@ -43,6 +63,55 @@ function updateUrlHash(nextHash, push) {
   }
 }
 
+const REVEAL_SELECTOR =
+  ".hero, .section-head, .project-row, .stack-item, .writeup-card, .contact-row, .post-header, .post-content > *, .site-footer";
+const STAGGER_SELECTOR = ".project-row, .stack-item, .writeup-card, .contact-row";
+let revealObserver = null;
+
+function getRevealObserver() {
+  if (revealObserver) return revealObserver;
+  if (
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+    typeof IntersectionObserver !== "function"
+  ) {
+    return null;
+  }
+  revealObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("is-revealed");
+        revealObserver.unobserve(entry.target);
+      });
+    },
+    { threshold: 0.02, rootMargin: "0px 0px -24px 0px" }
+  );
+  return revealObserver;
+}
+
+function observeScrollReveals(root = document) {
+  if (!root) return;
+  const observer = getRevealObserver();
+  if (!observer) return;
+
+  const targets =
+    root === postContent
+      ? Array.from(postContent.children)
+      : Array.from(root.querySelectorAll(REVEAL_SELECTOR));
+
+  targets.forEach((el) => {
+    if (el.classList.contains("scroll-reveal")) return;
+    if (el.matches(STAGGER_SELECTOR) && el.parentElement) {
+      const idx = Array.from(el.parentElement.children).indexOf(el);
+      if (idx > 0) {
+        el.style.setProperty("--reveal-delay", `${Math.min(idx, 6) * 45}ms`);
+      }
+    }
+    el.classList.add("scroll-reveal");
+    observer.observe(el);
+  });
+}
+
 function switchView(target, slug = "", options = {}) {
   const next = views[target] ? target : "home";
   const push = Boolean(options.push);
@@ -64,20 +133,23 @@ function switchView(target, slug = "", options = {}) {
     }
   });
 
+  if (views[next]) {
+    observeScrollReveals(views[next]);
+  }
+
   if (next === "research") {
-    const openedSlug = slug && typeof openPost === "function" ? openPost(slug) : "";
+    const openedSlug = slug ? openPost(slug) : "";
     if (openedSlug) {
       updateUrlHash(`#research/${encodeURIComponent(openedSlug)}`, push);
       return;
     }
-    if (typeof showResearchFeed === "function") {
-      showResearchFeed();
-    }
+    showResearchFeed();
     updateUrlHash("#research", push);
     return;
   }
 
   activePostRequest += 1;
+  cleanupTocScroll();
   updateUrlHash(`#${next}`, push);
 }
 
@@ -140,18 +212,6 @@ bindCopyButton(
   null,
   "Copy handle"
 );
-
-const researchFeed = document.getElementById("researchFeed");
-const researchReader = document.getElementById("researchReader");
-const writeupList = document.getElementById("writeupList");
-const writeupCount = document.getElementById("writeupCount");
-const postBackBtn = document.getElementById("postBackBtn");
-const postMeta = document.getElementById("postMeta");
-const postTitle = document.getElementById("postTitle");
-const postSummary = document.getElementById("postSummary");
-const postContent = document.getElementById("postContent");
-const loadedBodies = new Map();
-let activePostRequest = 0;
 
 function slugify(value) {
   return (
@@ -277,7 +337,7 @@ function appendPostMeta(container, post) {
 }
 
 function renderInlineMarkdown(container, text) {
-  const pattern = /`([^`]+)`|\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*|\*([^*]+)\*|~~((?:[^~]|~(?!~))+)~~/g;
+  const pattern = /`([^`]+)`|\[([^\]]+)\]\(([^)\s]+)\)|\*\*((?:[^*]|\*(?!\*))+)\*\*|\*([^*]+)\*|~~((?:[^~]|~(?!~))+)~~/g;
   let lastIndex = 0;
   let match;
 
@@ -296,7 +356,7 @@ function renderInlineMarkdown(container, text) {
         const link = document.createElement("a");
         link.className = "post-link";
         link.href = href;
-        link.textContent = match[2];
+        renderInlineMarkdown(link, match[2]);
         if (href.startsWith("http://") || href.startsWith("https://")) {
           link.target = "_blank";
           link.rel = "noopener noreferrer";
@@ -307,11 +367,11 @@ function renderInlineMarkdown(container, text) {
       }
     } else if (match[4] !== undefined) {
       const strong = document.createElement("strong");
-      strong.textContent = match[4];
+      renderInlineMarkdown(strong, match[4]);
       container.appendChild(strong);
     } else if (match[5] !== undefined) {
       const em = document.createElement("em");
-      em.textContent = match[5];
+      renderInlineMarkdown(em, match[5]);
       container.appendChild(em);
     } else if (match[6] !== undefined) {
       const del = document.createElement("del");
@@ -441,6 +501,7 @@ function renderMarkdown(container, markdown) {
   let listEl = null;
   let quoteLines = [];
   let inCodeBlock = false;
+  let codeLang = "";
   let codeLines = [];
 
   function flushParagraph() {
@@ -468,13 +529,18 @@ function renderMarkdown(container, markdown) {
   }
 
   function flushCodeBlock() {
-    const pre = document.createElement("pre");
-    pre.className = "post-code";
-    const code = document.createElement("code");
-    code.textContent = codeLines.join("\n");
-    pre.appendChild(code);
-    container.appendChild(pre);
+    if (codeLang === "graph") {
+      container.appendChild(renderCustomGraph(codeLines));
+    } else {
+      const pre = document.createElement("pre");
+      pre.className = "post-code";
+      const code = document.createElement("code");
+      code.textContent = codeLines.join("\n");
+      pre.appendChild(code);
+      container.appendChild(pre);
+    }
     codeLines = [];
+    codeLang = "";
     inCodeBlock = false;
   }
 
@@ -490,11 +556,13 @@ function renderMarkdown(container, markdown) {
       continue;
     }
 
-    if (/^\s*```/.test(line)) {
+    const fenceMatch = line.match(/^\s*```(.*)$/);
+    if (fenceMatch) {
       flushParagraph();
       flushList();
       flushQuote();
       inCodeBlock = true;
+      codeLang = fenceMatch[1].trim().toLowerCase();
       codeLines = [];
       continue;
     }
@@ -610,6 +678,404 @@ function renderMarkdown(container, markdown) {
   flushParagraph();
   flushList();
   flushQuote();
+
+  buildPostToc(container);
+  observeScrollReveals(container);
+}
+
+function renderCustomGraph(lines) {
+  const wrap = document.createElement("div");
+  wrap.className = "post-graph";
+
+  const meta = {};
+  const body = [];
+  lines.forEach((raw) => {
+    const line = raw.trim();
+    if (!line) return;
+    const kv = line.match(/^(type|title|direction|x|y|line)\s*:\s*(.+)$/i);
+    if (kv) {
+      meta[kv[1].toLowerCase()] = kv[2].trim();
+    } else {
+      body.push(line);
+    }
+  });
+
+  if (meta.title) {
+    const h = document.createElement("div");
+    h.className = "post-graph-title mono";
+    h.textContent = meta.title;
+    wrap.appendChild(h);
+  }
+
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+
+  const graphId = ++graphIdCounter;
+
+  if (meta.type === "bar") {
+    const labels = (meta.x || "").split("|").map((s) => s.trim()).filter(Boolean);
+    const values = (meta.y || "")
+      .split("|")
+      .map((s) => {
+        const n = Number(s.trim());
+        return Number.isFinite(n) ? n : 0;
+      });
+    const maxVal = Math.max(...values, 1);
+    const w = 640;
+    const h = 240;
+    const padL = 54;
+    const padR = 20;
+    const padT = 26;
+    const padB = 40;
+    const plotW = w - padL - padR;
+    const plotH = h - padT - padB;
+    svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+
+    const gradId = `gb-accent-${graphId}`;
+    const parts = [
+      `<defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#c084fc" stop-opacity="0.45"/><stop offset="100%" stop-color="#c084fc" stop-opacity="0.08"/></linearGradient></defs>`
+    ];
+    for (let i = 0; i <= 4; i += 1) {
+      const y = padT + (plotH * i) / 4;
+      const val = Math.round(maxVal * (1 - i / 4));
+      parts.push(`<line x1="${padL}" y1="${y}" x2="${w - padR}" y2="${y}" stroke="rgba(255,255,255,0.07)" stroke-dasharray="3 4"/>`);
+      parts.push(`<text x="${padL - 8}" y="${y + 4}" text-anchor="end" fill="#a1a1aa" font-size="11" font-family="monospace">${val}</text>`);
+    }
+
+    const step = plotW / Math.max(values.length, 1);
+    const barW = Math.min(56, step * 0.52);
+    const linePts = [];
+
+    values.forEach((v, i) => {
+      const bh = Math.max((v / maxVal) * plotH, 3);
+      const cx = padL + step * i + step / 2;
+      const x = cx - barW / 2;
+      const y = padT + plotH - bh;
+      linePts.push(`${cx},${y}`);
+      parts.push(`<rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="4" fill="url(#${gradId})" stroke="rgba(192,132,252,0.55)" stroke-width="1.2"/>`);
+      parts.push(`<text x="${cx}" y="${y - 7}" text-anchor="middle" fill="#e4e4e7" font-size="11" font-weight="600" font-family="monospace">${v.toLocaleString()}</text>`);
+      if (labels[i]) {
+        parts.push(`<text x="${cx}" y="${h - 14}" text-anchor="middle" fill="#a1a1aa" font-size="11" font-family="monospace">${escapeSvg(labels[i])}</text>`);
+      }
+    });
+
+    if (meta.line === "true" && linePts.length > 1) {
+      parts.push(`<polyline points="${linePts.join(" ")}" fill="none" stroke="#c084fc" stroke-width="1.8" stroke-opacity="0.9"/>`);
+      linePts.forEach((pt) => {
+        const [px, py] = pt.split(",");
+        parts.push(`<circle cx="${px}" cy="${py}" r="3.5" fill="#18181b" stroke="#c084fc" stroke-width="1.8"/>`);
+      });
+    }
+
+    svg.innerHTML = parts.join("");
+    wrap.appendChild(svg);
+    return wrap;
+  }
+
+  const edges = [];
+  const nodeOrder = [];
+  const addNode = (name) => {
+    if (!nodeOrder.includes(name)) nodeOrder.push(name);
+  };
+  body.forEach((line) => {
+    const m = line.match(/^(.+?)\s*--(?:\|(.+?)\|)?-->\s*(.+)$/) || line.match(/^(.+?)\s*->\s*(.+)$/);
+    if (!m) return;
+    const from = m[1].trim();
+    const label = m.length === 4 ? (m[2] || "").trim() : "";
+    const to = (m.length === 4 ? m[3] : m[2]).trim();
+    addNode(from);
+    addNode(to);
+    edges.push({ from, to, label });
+  });
+
+  const depth = {};
+  nodeOrder.forEach((n) => { depth[n] = 0; });
+  for (let pass = 0; pass < nodeOrder.length; pass += 1) {
+    edges.forEach((e) => {
+      if (depth[e.to] <= depth[e.from]) {
+        depth[e.to] = depth[e.from] + 1;
+      }
+    });
+  }
+
+  const cols = [];
+  nodeOrder.forEach((n) => {
+    const d = depth[n];
+    if (!cols[d]) cols[d] = [];
+    cols[d].push(n);
+  });
+
+  const vertical = (meta.direction || "").toLowerCase() === "td";
+  const boxH = 38;
+  const pos = {};
+  const pad = 14;
+  let totalW = 640;
+  let totalH = 200;
+
+  if (vertical) {
+    const nodeWidth = (name) => Math.max(170, name.length * 7.4 + 28);
+    const maxW = Math.max(...nodeOrder.map(nodeWidth), 200);
+    const gapY = 42;
+    const gapX = 18;
+    const maxCross = Math.max(...cols.map((c) => (c ? c.length : 0)), 1);
+    totalW = Math.max(600, pad * 2 + maxCross * maxW + (maxCross - 1) * gapX);
+    totalH = pad * 2 + cols.length * boxH + Math.max(cols.length - 1, 0) * gapY;
+
+    cols.forEach((group, d) => {
+      if (!group) return;
+      const span = group.length * maxW + (group.length - 1) * gapX;
+      const startX = (totalW - span) / 2;
+      group.forEach((name, idx) => {
+        const nw = nodeWidth(name);
+        pos[name] = { x: startX + idx * (maxW + gapX) + (maxW - nw) / 2, y: pad + d * (boxH + gapY), w: nw };
+      });
+    });
+  } else {
+    const maxColsPerRow = 3;
+    const colW = 190;
+    const gapX = 28;
+    const gapY = 46;
+    const bandCount = Math.ceil(cols.length / maxColsPerRow);
+    const bandHeights = [];
+    for (let b = 0; b < bandCount; b += 1) {
+      let maxInBand = 1;
+      for (let c = b * maxColsPerRow; c < Math.min((b + 1) * maxColsPerRow, cols.length); c += 1) {
+        if (cols[c] && cols[c].length > maxInBand) maxInBand = cols[c].length;
+      }
+      bandHeights.push(maxInBand * boxH + (maxInBand - 1) * 14);
+    }
+    totalW = pad * 2 + Math.min(cols.length, maxColsPerRow) * colW + Math.max(Math.min(cols.length, maxColsPerRow) - 1, 0) * gapX;
+    totalH = pad * 2 + bandHeights.reduce((s, bh) => s + bh, 0) + Math.max(bandCount - 1, 0) * gapY;
+
+    let bandTop = pad;
+    for (let b = 0; b < bandCount; b += 1) {
+      const bh = bandHeights[b];
+      const startCol = b * maxColsPerRow;
+      const endCol = Math.min((b + 1) * maxColsPerRow, cols.length);
+      for (let c = startCol; c < endCol; c += 1) {
+        const group = cols[c];
+        if (!group) continue;
+        const localCol = c - startCol;
+        const span = group.length * boxH + (group.length - 1) * 14;
+        const startY = bandTop + (bh - span) / 2;
+        group.forEach((name, idx) => {
+          const nw = Math.min(colW, Math.max(130, name.length * 7.2 + 24));
+          pos[name] = {
+            x: pad + localCol * (colW + gapX) + (colW - nw) / 2,
+            y: startY + idx * (boxH + 14),
+            w: nw
+          };
+        });
+      }
+      bandTop += bh + gapY;
+    }
+  }
+
+  svg.setAttribute("viewBox", `0 0 ${totalW} ${totalH}`);
+
+  const arrId = `g-arr-${graphId}`;
+  const parts = [
+    `<defs><marker id="${arrId}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M 0 1 L 9 5 L 0 9 z" fill="rgba(192,132,252,0.85)"/></marker></defs>`
+  ];
+
+  edges.forEach((e) => {
+    const a = pos[e.from];
+    const b = pos[e.to];
+    if (!a || !b) return;
+    let x1; let y1; let x2; let y2; let d;
+    if (vertical || b.y > a.y + boxH + 10) {
+      x1 = a.x + a.w / 2;
+      y1 = a.y + boxH;
+      x2 = b.x + b.w / 2;
+      y2 = b.y - 3;
+      const midY = (y1 + y2) / 2;
+      d = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
+    } else {
+      x1 = a.x + a.w;
+      y1 = a.y + boxH / 2;
+      x2 = b.x - 3;
+      y2 = b.y + boxH / 2;
+      const midX = (x1 + x2) / 2;
+      d = `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
+    }
+    parts.push(`<path d="${d}" fill="none" stroke="rgba(192,132,252,0.45)" stroke-width="1.35" marker-end="url(#${arrId})"/>`);
+    if (e.label) {
+      const lx = (x1 + x2) / 2 + (vertical ? 10 : 0);
+      const ly = (y1 + y2) / 2 + (vertical ? 4 : -7);
+      const anchor = vertical ? "start" : "middle";
+      parts.push(`<text x="${lx}" y="${ly}" text-anchor="${anchor}" fill="#c084fc" font-size="10.5" font-family="monospace">${escapeSvg(e.label)}</text>`);
+    }
+  });
+
+  const maxDepth = Math.max(...Object.values(depth), 1);
+  nodeOrder.forEach((name) => {
+    const p = pos[name];
+    const isTerminal = depth[name] === 0 || depth[name] === maxDepth;
+    const stroke = isTerminal ? "rgba(192,132,252,0.65)" : "rgba(255,255,255,0.18)";
+    const fill = isTerminal ? "rgba(192,132,252,0.08)" : "rgba(255,255,255,0.03)";
+    parts.push(`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${boxH}" rx="7" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>`);
+    parts.push(`<text x="${p.x + p.w / 2}" y="${p.y + boxH / 2 + 4}" text-anchor="middle" fill="#f4f4f5" font-size="11.5" font-weight="500" font-family="monospace">${escapeSvg(name)}</text>`);
+  });
+
+  svg.innerHTML = parts.join("");
+  wrap.appendChild(svg);
+  return wrap;
+}
+
+function escapeSvg(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function cleanupTocScroll() {
+  if (tocScrollHandler) {
+    window.removeEventListener("scroll", tocScrollHandler);
+    tocScrollHandler = null;
+  }
+}
+
+function buildPostToc(container) {
+  if (!postToc) return;
+
+  cleanupTocScroll();
+
+  const headings = Array.from(container.querySelectorAll("h2, h3, h4"));
+  if (headings.length === 0) {
+    postToc.replaceChildren();
+    postToc.hidden = true;
+    return;
+  }
+
+  const title = document.createElement("div");
+  title.className = "post-toc-title";
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  icon.setAttribute("viewBox", "0 0 16 16");
+  icon.setAttribute("fill", "none");
+  icon.setAttribute("stroke", "currentColor");
+  icon.setAttribute("stroke-width", "1.5");
+  icon.innerHTML = '<path d="M2 4h12M2 8h10M2 12h8"/>';
+  const titleText = document.createElement("span");
+  titleText.textContent = "Contents";
+  title.append(icon, titleText);
+
+  const body = document.createElement("div");
+  body.className = "post-toc-body";
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "post-toc-rail");
+
+  const list = document.createElement("ul");
+  list.className = "post-toc-list";
+
+  const items = [];
+  headings.forEach((heading, idx) => {
+    const id = `sec-${idx}-${slugify(heading.textContent)}`;
+    heading.id = id;
+
+    const depth = heading.tagName === "H4" ? 2 : heading.tagName === "H3" ? 1 : 0;
+    const li = document.createElement("li");
+    li.className = "post-toc-item";
+    li.dataset.depth = String(depth);
+
+    const a = document.createElement("a");
+    a.className = "post-toc-link";
+    a.href = `#${id}`;
+    a.textContent = heading.textContent;
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      heading.scrollIntoView({ block: "start" });
+    });
+
+    li.appendChild(a);
+    list.appendChild(li);
+    items.push({ heading, li, depth });
+  });
+
+  body.append(svg, list);
+  postToc.replaceChildren(title, body);
+  postToc.hidden = false;
+
+  let currentActive = 0;
+  let railPts = [];
+  let arrowEl = null;
+  let dotEls = [];
+
+  const drawRail = () => {
+    const h = list.offsetHeight;
+    const w = list.offsetWidth;
+    if (!h || !w) return;
+    svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+
+    railPts = items.map((item) => ({
+      x: 7 + item.depth * 14,
+      y: item.li.offsetTop + 13
+    }));
+
+    let d = `M ${railPts[0].x} 0 L ${railPts[0].x} ${railPts[0].y}`;
+    for (let i = 0; i < railPts.length - 1; i += 1) {
+      const a = railPts[i];
+      const b = railPts[i + 1];
+      if (a.x === b.x) {
+        d += ` L ${b.x} ${b.y}`;
+      } else {
+        const midY = (a.y + b.y) / 2;
+        d += ` C ${a.x} ${midY}, ${b.x} ${midY}, ${b.x} ${b.y}`;
+      }
+    }
+
+    const parts = [`<path d="${d}" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="1.2" stroke-dasharray="2.5 3"/>`];
+    railPts.forEach((pt, idx) => {
+      parts.push(`<circle class="post-toc-dot" data-idx="${idx}" cx="${pt.x}" cy="${pt.y}" r="2.8" fill="#18181b" stroke="rgba(255,255,255,0.35)" stroke-width="1.2"/>`);
+    });
+    parts.push(`<polygon class="post-toc-arrow" points="0,6 -4.5,-3 0,-1 4.5,-3" fill="#ffffff"/>`);
+    svg.innerHTML = parts.join("");
+    arrowEl = svg.querySelector(".post-toc-arrow");
+    dotEls = Array.from(svg.querySelectorAll(".post-toc-dot"));
+  };
+
+  const syncRailState = () => {
+    if (!arrowEl || railPts.length === 0) return;
+    const activePt = railPts[currentActive] || railPts[0];
+    arrowEl.style.transform = `translate(${activePt.x}px, ${activePt.y}px)`;
+    dotEls.forEach((dot, idx) => {
+      if (idx === currentActive) {
+        dot.style.opacity = "0";
+      } else if (idx < currentActive) {
+        dot.style.opacity = "1";
+        dot.setAttribute("fill", "rgba(255,255,255,0.45)");
+        dot.setAttribute("stroke", "rgba(255,255,255,0.65)");
+      } else {
+        dot.style.opacity = "1";
+        dot.setAttribute("fill", "#18181b");
+        dot.setAttribute("stroke", "rgba(255,255,255,0.35)");
+      }
+    });
+  };
+
+  const updateActive = () => {
+    let activeIdx = 0;
+    for (let i = 0; i < items.length; i += 1) {
+      if (items[i].heading.getBoundingClientRect().top <= 120) {
+        activeIdx = i;
+      }
+    }
+    currentActive = activeIdx;
+    items.forEach((item, idx) => {
+      item.li.classList.toggle("is-active", idx === activeIdx);
+    });
+    if (!arrowEl) drawRail();
+    syncRailState();
+  };
+
+  tocScrollHandler = updateActive;
+  window.addEventListener("scroll", tocScrollHandler, { passive: true });
+  requestAnimationFrame(() => {
+    drawRail();
+    updateActive();
+  });
 }
 
 function renderPostStatus(message) {
@@ -622,6 +1088,7 @@ function renderPostStatus(message) {
 
 function showResearchFeed() {
   activePostRequest += 1;
+  cleanupTocScroll();
   if (researchFeed) researchFeed.hidden = false;
   if (researchReader) researchReader.hidden = true;
 }
@@ -749,6 +1216,8 @@ function renderPostFeed() {
     card.appendChild(btn);
     writeupList.appendChild(card);
   });
+
+  observeScrollReveals(writeupList);
 }
 
 if (postBackBtn) {
@@ -798,6 +1267,14 @@ function shuffle(list) {
 }
 
 const DEFAULT_VOLUME = 40;
+const SC_EMBED_OPTIONS = {
+  show_artwork: false,
+  buying: false,
+  sharing: false,
+  download: false,
+  show_comments: false,
+  show_user: false
+};
 const playlist = shuffle(tracks);
 const failedUrls = new Set();
 let trackIndex = 0;
@@ -810,12 +1287,6 @@ let isAdvancing = false;
 let isLoadingTrack = false;
 let userPaused = false;
 let playWatchdogId = null;
-
-const enterGate = document.getElementById("enterGate");
-const scIframe = document.getElementById("scWidget");
-const audioLabel = document.getElementById("audioLabel");
-const audioToggleBtn = document.getElementById("audioToggleBtn");
-const audioNextBtn = document.getElementById("audioNextBtn");
 
 function currentTrackUrl() {
   return playlist[trackIndex].urls[candidateIndex];
@@ -858,46 +1329,45 @@ function schedulePlayWatchdog() {
 function buildEmbedUrl(trackUrl, autoPlay) {
   const params = new URLSearchParams({
     url: trackUrl,
-    auto_play: autoPlay ? "true" : "false",
-    show_artwork: "false",
-    buying: "false",
-    sharing: "false",
-    download: "false",
-    show_comments: "false",
-    show_user: "false"
+    auto_play: String(autoPlay),
+    ...Object.fromEntries(
+      Object.entries(SC_EMBED_OPTIONS).map(([k, v]) => [k, String(v)])
+    )
   });
   return `https://w.soundcloud.com/player/?${params.toString()}`;
 }
 
-function updateAudioUI(isPlaying) {
-  if (!audioLabel || !audioToggleBtn || !audioNextBtn) return;
-  const current = playlist[trackIndex];
-  audioToggleBtn.hidden = false;
-  audioNextBtn.hidden = false;
-  if (isPlaying) {
-    audioLabel.textContent = `playing: ${current.label}`;
-    audioLabel.classList.add("is-playing");
-    audioToggleBtn.textContent = "pause";
-  } else {
-    audioLabel.textContent = `paused: ${current.label}`;
-    audioLabel.classList.remove("is-playing");
-    audioToggleBtn.textContent = "play";
+function setAudioControls({ label, playing = false, toggleText, showControls = true }) {
+  if (audioLabel && label !== undefined) {
+    audioLabel.textContent = label;
+    audioLabel.classList.toggle("is-playing", playing);
   }
+  if (audioToggleBtn) {
+    audioToggleBtn.hidden = !showControls;
+    if (toggleText) audioToggleBtn.textContent = toggleText;
+  }
+  if (audioNextBtn) {
+    audioNextBtn.hidden = !showControls;
+  }
+}
+
+function updateAudioUI(isPlaying) {
+  const current = playlist[trackIndex];
+  setAudioControls({
+    label: `${isPlaying ? "playing" : "paused"}: ${current.label}`,
+    playing: isPlaying,
+    toggleText: isPlaying ? "pause" : "play"
+  });
 }
 
 function showAudioError() {
   clearPlayWatchdog();
   isLoadingTrack = false;
-  if (!audioLabel) return;
-  audioLabel.classList.remove("is-playing");
-  audioLabel.textContent = "soundcloud playback unavailable";
-  if (audioToggleBtn) {
-    audioToggleBtn.hidden = false;
-    audioToggleBtn.textContent = "play";
-  }
-  if (audioNextBtn) {
-    audioNextBtn.hidden = false;
-  }
+  setAudioControls({
+    label: "soundcloud playback unavailable",
+    playing: false,
+    toggleText: "play"
+  });
 }
 
 function playTrackAt(index, candIndex = 0) {
@@ -908,17 +1378,11 @@ function playTrackAt(index, candIndex = 0) {
   trackIndex = (index + playlist.length) % playlist.length;
   candidateIndex = candIndex;
   const track = playlist[trackIndex];
-  if (audioLabel) {
-    audioLabel.textContent = `loading: ${track.label}`;
-    audioLabel.classList.remove("is-playing");
-  }
-  if (audioToggleBtn) {
-    audioToggleBtn.hidden = false;
-    audioToggleBtn.textContent = "pause";
-  }
-  if (audioNextBtn) {
-    audioNextBtn.hidden = false;
-  }
+  setAudioControls({
+    label: `loading: ${track.label}`,
+    playing: false,
+    toggleText: "pause"
+  });
   if (!scWidget || !widgetReady) {
     pendingPlay = true;
     if (scIframe) {
@@ -929,12 +1393,7 @@ function playTrackAt(index, candIndex = 0) {
   applyVolume();
   scWidget.load(currentTrackUrl(), {
     auto_play: true,
-    show_artwork: false,
-    buying: false,
-    sharing: false,
-    download: false,
-    show_comments: false,
-    show_user: false,
+    ...SC_EMBED_OPTIONS,
     callback() {
       applyVolume();
       checkLoadedSoundPlayable(true);
@@ -1143,3 +1602,5 @@ if (audioNextBtn) {
     playTrackAt(trackIndex + 1, 0);
   });
 }
+
+observeScrollReveals(document);
