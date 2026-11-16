@@ -1,9 +1,18 @@
 window.BLOG_POSTS = [
   {
+    slug: "kuzi",
+    title: "Kuzi: all that native crypto just to lose to Class.forName",
+    date: "2026-11-16",
+    tags: ["minecraft", "fabric", "jvm", "native"],
+    summary: "Turning a streamed native loader into a standalone 1.21.11 Fabric mod",
+    bodyFile: "posts/kuzi.md",
+    published: true
+  },
+  {
     slug: "temple",
     title: "Temple.nz: Did King Terry the terrible make a Minecraft client?",
     date: "2026-11-15",
-    tags: ["minecraft", "fabric", "jvm"],
+    tags: ["minecraft", "fabric", "jvm", "vmp", "native"],
     summary: "Dumping a VMP loader, catching lazy modules with JVMTI, and making it a standalone Fabric mod",
     bodyFile: "posts/temple.md",
     published: true
@@ -18,12 +27,12 @@ window.BLOG_POSTS = [
     published: true
   },
   {
-    slug: "azuradlc-drm",
+    slug: "azuradlc",
     title: "AzuraDLC: can AI really do a good job at DRM?",
     date: "2026-11-11",
-    tags: ["minecraft", "fabric", "jvm"],
+    tags: ["minecraft", "fabric", "jvm", "native"],
     summary: "Reverse engineering a protected Fabric Mod",
-    bodyFile: "posts/azuradlc-drm.md",
+    bodyFile: "posts/azuradlc.md",
     published: true
   }
 ];

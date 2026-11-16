@@ -6,15 +6,24 @@ const views = {
   contact: document.getElementById("view-contact")
 };
 
+const SLUG_REDIRECTS = {
+  "azuradlc-drm": "azuradlc"
+};
+
+function resolvePostSlug(slug) {
+  const normalized = slugify(slug);
+  return SLUG_REDIRECTS[slug] || SLUG_REDIRECTS[normalized] || slug;
+}
+
 function parseRouteHash() {
   const raw = window.location.hash.replace(/^#/, "");
   if (!raw) return { view: "", slug: "" };
   if (raw.startsWith("research/")) {
     const rawSlug = raw.slice("research/".length).replace(/^\/+|\/+$/g, "");
     try {
-      return { view: "research", slug: decodeURIComponent(rawSlug) };
+      return { view: "research", slug: resolvePostSlug(decodeURIComponent(rawSlug)) };
     } catch (_) {
-      return { view: "research", slug: rawSlug };
+      return { view: "research", slug: resolvePostSlug(rawSlug) };
     }
   }
   if (views[raw]) return { view: raw, slug: "" };
@@ -629,8 +638,9 @@ function renderLoadedBody(post, text) {
 
 function openPost(slug) {
   const posts = getPosts();
-  const normalized = slugify(slug);
-  const post = posts.find((item) => item.slug === slug || item.slug === normalized);
+  const resolvedSlug = resolvePostSlug(slug);
+  const normalized = slugify(resolvedSlug);
+  const post = posts.find((item) => item.slug === resolvedSlug || item.slug === normalized);
   if (!post || !researchReader) return "";
 
   const requestId = ++activePostRequest;
